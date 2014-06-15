@@ -1,15 +1,39 @@
 //*****************************************************************************
-// Program:	 LAPIS Development Board Demo Code Q112
-// Author:	 C. Schell & K. Bahar
+// Program:	 IOT UV Sensor Board Firmware for Q112 LApis Microcontroller
+// Author:	 K. Bahar, C. Schell, F. Lee
 //		 ROHM Semiconductor USA, LLC
 //		 US Design Center
-// Started:  April 6th, 2013
-// Purpose:	 Demonstration Code for use with Lapis "LAPIS" Development Board 
-// Updated:	 October 17th, 2013
+// Started:  June 14th, 2014
+// Purpose:	 Firmware for Q112 for IOT Sensor Board 
+// Updated:	 June 14th, 2014
 //*****************************************************************************
 
+/* ============================= IOT Board Specs ============================== 
+//	Needed Section:
+//	Pin A0 = UV Enable Signal	= Need to be analog output
+//	Pin A1 = UV Raw Output		= Need to be an ADC input
+//	Pin B0 = Phone to MCU Comm  = Manchester Encoded Input
+//	Pin B1 = MCU to Phone Comm	= Manchester Encoded Output
+//	Pin D0 = LDO_EN				= Needs to be analog output
+//
+//	Optional Sections:
+//	Sensor Header:
+//		Pin B5 = I2C SCL
+//		Pin B6 = I2C SDA
+//		Pin B2 = Int Pin for Sensor Header
+//		Pin B3 = Aux Pin for Sensor Header
+//	LED Block:
+//		Pin D1 = LED1			= Need to be analog Output
+//		Pin D2 = LED2			= Need to be analog Output
+//		Pin D3 = LED3			= Need to be analog Output
+//		Pin D4 = LED4			= Need to be analog Output
+//		Pin D5 = LED5			= Need to be analog Output
+//	Unused Block:
+//		Pins C0 to C7
+// ============================= IOT Board Specs ============================== */
+
 //*****************************************************************************
-// Microcontroller's connections on the LAPIS Development Board to the 
+// Microcontroller's connections on the LaPi Development Board to the 
 //  Plug 'n Play, Raspberry Pi Compatible, Universal Connectors:
 //
 // ================================ ML610Q112 ================================= 
@@ -32,8 +56,8 @@
 //*****************************************************************************
 
 //*****************************************************************************
-// Q112 Microcontroller's I/O Pins at J4 on the LAPIS Development Board to the
-// LAPIS Development Board 
+// Q112 Microcontroller's I/O Pins at J4 on the LaPi Development Board to the
+// LaPi Development Board 
 //
 // ================================ ML610Q112 ================================= 
 //
@@ -54,12 +78,11 @@
 //=============================================================================
 //*****************************************************************************
 
-
 //***** PREPROCESSOR DIRECTIVES ***********************************************
 // INCLUDED FILES...
 // Include Path: common;main;irq;timer;clock;tbc;pwm;uart;
 
-	#include	<ML610112.H>	// Lapis Micro ML610Q112 on LAPIS Development Board
+	#include	<ML610112.H>	// Lapis Micro ML610Q112 on LaPi Development Board
 	#include	<stdlib.h>		// General-purpose utilities
 	#include 	<uart.h>		// UART Function Prototypes
 	#include 	<common.h>		// Common Definitions
@@ -67,8 +90,8 @@
 	#include 	<mcu.h>			// MCU Definition
 	#include	<i2c.h>			// I2C Definition
 	//#include 	<clock.h>		// Set System Clock API
-	//#include 	<tbc.h>			// Set TBC (Timer Based Clock) API
-	//#include 	<timer.h>		// Timer Macros & APIs
+	#include 	<tbc.h>			// Set TBC (Timer Based Clock) API
+	#include 	<timer.h>		// Timer Macros & APIs
 	//#include 	<main.h>		// Clear WDT API
 	//#include	<ctype.h>		// Character classification and conversion 
 	//#include	<errno.h>		// Error identifiers Library
@@ -88,35 +111,34 @@
 //*****************************************************************************
  // I/O PIN DATA ALIASES...
 // Connections for Q112 Universal Socket
-	#define RX 		PB0D 
-	#define TX 		PB1D 
+	#define RX 			PB0D 
+	#define TX 			PB1D 
 	#define I2C_SDA 	PB6D 
 	#define I2C_SCL 	PB5D 
-	#define GPIO_04	PB2D 
-	#define GPIO_17	PC0D
-	#define GPIO_21	PC1D
-	#define GPIO_22	PC2D
-	#define GPIO_18	PB7D
-	#define GPIO_23	PD1D
-	#define GPIO_24	PD2D
-	#define GPIO_25	PD3D
+	#define GPIO_04		PB2D 
+	#define GPIO_17		PC0D
+	#define GPIO_21		PC1D
+	#define GPIO_22		PC2D
+	#define GPIO_18		PB7D
+	#define GPIO_23		PD1D
+	#define GPIO_24		PD2D
+	#define GPIO_25		PD3D
 	#define SPI_MOSI	PB4D
 	#define SPI_MISO	PB3D
 	#define SPI_SCL 	PB5D
-	#define SPI_CS0	PD4D
-	#define SPI_CS1 	PD5D 	
+	#define SPI_CS0		PD4D
+	#define SPI_CS1 	PD5D
 
 //*****************************************************************************
 //===========================================================================
 //   MACROS: 
 //===========================================================================
-#define WelcomeString		( "LAPIS ML610Q112 LAPIS DEVELOPMENT DEMO\n\r" )
+#define WelcomeString		( "LAPIS ML610Q112 LaPi DEVELOPMENT DEMO\n\r" )
 #define WelcomeString_LEN	( sizeof(WelcomeString) - 1 )
 
 // ===== Peripheral setting.=====
 #define HSCLK_KHZ	( 8000u )	// 8MHz = 8000kHz (will be multiplied by 1024 to give 8,192,000Hz)
-#define FLG_SET	( 0x01u ) 
-
+#define FLG_SET		( 0x01u )
 
 // SET DESIRED UART SETTINGS HERE! (Options in UART.h)
 #define UART_BAUDRATE		( UART_BR_9600BPS) 	// Data Bits Per Second - Tested at rates from 2400bps to 512000bps!
@@ -125,6 +147,7 @@
 #define UART_STOP_BIT		( UART_STP_1BIT )		// x Stop-Bits
 #define UART_LOGIC			( UART_NEG_POS )		// Desired Logic
 #define UART_DIRECTION		( UART_DIR_LSB )		// LSB or MSB First
+//#define _TBC_H_
 
 //*****************************************************************************
 
@@ -132,20 +155,14 @@
 //===========================================================================
 //   STRUCTURES: 
 //===========================================================================
-//Example Structure Declaration
-typedef struct {
-	unsigned char state     : 1;
-	unsigned char state_sub : 2;
-	unsigned char reserve   : 5;
-} STRUCT_STATE;	
 
 static const tUartSetParam  _uartSetParam = {		// UART Parameters
-	UART_BAUDRATE,						// Members of Structure...
-	UART_DATA_LENGTH,						// Members of Structure...
-	UART_PARITY_BIT,						// Members of Structure...
-	UART_STOP_BIT,						// Members of Structure...
-	UART_LOGIC,							// Members of Structure...
-	UART_DIRECTION						// Members of Structure...
+	UART_BAUDRATE,								// Members of Structure...
+	UART_DATA_LENGTH,							// Members of Structure...
+	UART_PARITY_BIT,							// Members of Structure...
+	UART_STOP_BIT,								// Members of Structure...
+	UART_LOGIC,									// Members of Structure...
+	UART_DIRECTION								// Members of Structure...
 };
 
 //*****************************************************************************
@@ -158,73 +175,30 @@ static const tUartSetParam  _uartSetParam = {		// UART Parameters
 // 	types, formal parameter names and number of arguments to the function                                 
 //===========================================================================
 void main_clrWDT( void );			// no return value and no arguments
-void Initialization( void );			// no return value and no arguments
+void Initialization( void );		// no return value and no arguments
 void SetOSC( void );				// no return value and no arguments
-void analog_comparator( void );		// no return value and no arguments
 void PortA_Low( void );				// no return value and no arguments
 void PortB_Low( void );				// no return value and no arguments
 void PortC_Low( void );				// no return value and no arguments
 void PortD_Low( void );				// no return value and no arguments
-void PortA_Digital_Inputs( void );		// no return value and no arguments
-void PinB0_PWM( void ); 			// no return value and no arguments
 
+//UART and I2C Functions
 void _funcUartFin( unsigned int size, unsigned char errStat );
 void _funcI2CFin( unsigned int size, unsigned char errStat );
-void checkI2C( void );
 void main_reqNotHalt( void );
 void _intUart( void );
 void _intI2c( void );
-void NOP1000( void );
 //*****************************************************************************
 
 //GLOBALS...
+//UART and I2C Variables
 unsigned char	_flgUartFin;
 unsigned char 	_flgI2CFin;
 unsigned char	_reqNotHalt;
 
-unsigned char	HelloWorld[14] = {"Hello World!  "};
-
-unsigned char	InputStatus[23] = {"INP_00000000_00000000"};	//Used for Testing the UART Terminal during initial
-unsigned char	InputRec[14] = {"INP Received"};				//Used for Testing the UART Terminal during initial
-unsigned char	OutputRec[23] = {"OUT Received         "};		//Used for Testing the UART Terminal during initial
-unsigned char	RecWorld[21];									//Used for Testing the UART Terminal during initial
-unsigned char	AckMCUConn[22] = {"ML610Q112 Connected!"};
-unsigned char	ListFWRev[22] = {"Firmware Version: 01"};
-unsigned char	NackMCUConn[62] = {"Please Close Port and change Target MCU under Device Options"};
-unsigned char	I2C_TX_REC[21] = {"I2CTX CMD Received!"};
-unsigned char	I2C_RX_REC[21] = {"I2CRX CMD Received!"};
-unsigned char	I2C_RX_Data[23] = {"I2C-R X X X X X X X X"};
-
-unsigned int	UART_VAR;
-
-static unsigned char			I2C_BUFF[46];
-static unsigned char			I2CAdd;
-static unsigned char			I2CNumBytes;
-static unsigned char			Data0Str;
-static unsigned char			Data1Str;
-static unsigned char			Data2Str;
-static unsigned char			Data3Str;
-static unsigned char			Data4Str;
-static unsigned char			Data5Str;
-static unsigned char			Data6Str;
-static unsigned char			Data7Str;
-static unsigned char			RegAddr;
-static unsigned char			I2CAdd_temp;
-static unsigned char			I2CNumBytes_temp;
-static unsigned char			Data0Str_temp;
-static unsigned char			Data1Str_temp;
-static unsigned char			Data2Str_temp;
-static unsigned char			Data3Str_temp;
-static unsigned char			Data4Str_temp;
-static unsigned char			Data5Str_temp;
-static unsigned char			Data6Str_temp;
-static unsigned char			Data7Str_temp;
-static unsigned char			RegAddr_temp;
-static unsigned char			I2CSendInfo[8];
-static unsigned char			I2CReceInfo[8];
-static unsigned char			chari;
-static unsigned char			charj;
-static unsigned char			chark;
+//General Variables
+unsigned char	HelloWorld[14] = 	{"Hello World!  "};
+unsigned int	Test = 0;
 
 unsigned int ret;
 unsigned int testI2C;
@@ -239,754 +213,27 @@ unsigned int testI2C;
 int main(void) 
 {
 
-char char_a;		// -128 to 127
-unsigned char uchar;	// 0-255
-int inta, table [100];	// -32,768 to 32767
-unsigned int uint;	// 0 to 65,535
-long long_a,delay;	// -2,147,483,648 to 2,147,483,647
-float float_a;		// 1.17549435e-38 to 3.40282347e+38
-double double_a;		// 2.2250738585072014e-308 to 1.7976931348623157e+308 
-
-//unsigned char encoder_position, previous_encoder_position;  // 0-255
-unsigned char button_flag;  						// 0-255
-int i,j,k,x,y;								// -32,768 to 32767
-unsigned char sndByte;
-unsigned int count;
-char maskC;
-
-
 Init:
 	Initialization(); //Ports, UART, Timers, Oscillator, Comparators, etc.
 
-RX_Loop:	
+Loop:	
 		main_clrWDT();
 		
-		//Reset RecWorld for UART Receive
-		for (i=0;i<22;i++)
-		{
-			RecWorld[i] = 0;	
-		}
+		Test ^= 1;
 		
-		//Begin UART Receive
-		_flgUartFin = 0;
-		uart_stop();
-		uart_startReceive(RecWorld, 21, _funcUartFin);
-		while(_flgUartFin != 1){
-			NOP1000();
-			main_clrWDT();
-		}
-		
-		//Check UART Receive String for "ACK"
-		//if ACK Sent, Return "UART Connected"
-		//--This loop triggers when COM port is opened on PC
-		if(RecWorld[0] == 0x41){			//if RECWORLD == "ACK2"
-			if(RecWorld[1] == 0x43){
-				if(RecWorld[2] == 0x4B){
-					if(RecWorld[3] == 0x32){
-						_flgUartFin = 0;
-						uart_stop();
-						uart_startSend(AckMCUConn, 22, _funcUartFin);
-						while(_flgUartFin != 1){
-							NOP1000();
-							main_clrWDT();
-						}
-						_flgUartFin = 0;
-						uart_stop();
-						uart_startSend(ListFWRev, 22, _funcUartFin);
-						while(_flgUartFin != 1){
-							NOP1000();
-							main_clrWDT();
-						}
-					}
-					else
-					{
-						_flgUartFin = 0;
-						uart_stop();
-						uart_startSend(NackMCUConn, 62, _funcUartFin);
-						while(_flgUartFin != 1){
-							NOP1000();
-							main_clrWDT();
-						}
-						
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "INC" - Input, Port C
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x49){			//if RECWORLD == "INC"
-			if(RecWorld[1] == 0x4E){
-				if(RecWorld[2] == 0x43){
-					InputStatus[2] = 0x43;
-					InputRec[2] = 0x43;
-					for(count = 4; count < 12; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					
-					//Set PORTC to Input or Output based on PC application
-					PC7DIR = RecWorld[4];
-					PC6DIR = RecWorld[5];
-					PC5DIR = RecWorld[6];
-					PC4DIR = RecWorld[7];
-					PC3DIR = RecWorld[8];
-					PC2DIR = RecWorld[9];
-					PC1DIR = RecWorld[10];
-					PC0DIR = RecWorld[11];
-					
-					//Format I/O Direction into output string
-					InputStatus[4] = PC7DIR + 0x30;
-					InputStatus[5] = PC6DIR + 0x30;
-					InputStatus[6] = PC5DIR + 0x30;
-					InputStatus[7] = PC4DIR + 0x30;
-					InputStatus[8] = PC3DIR + 0x30;
-					InputStatus[9] = PC2DIR + 0x30;
-					InputStatus[10] = PC1DIR + 0x30;
-					InputStatus[11] = PC0DIR + 0x30;
-					
-					//Format I/O Level into output string
-					InputStatus[13] = PC7D + 0x30;
-					InputStatus[14] = PC6D + 0x30;
-					InputStatus[15] = PC5D + 0x30;
-					InputStatus[16] = PC4D + 0x30;
-					InputStatus[17] = PC3D + 0x30;
-					InputStatus[18] = PC2D + 0x30;
-					InputStatus[19] = PC1D + 0x30;
-					InputStatus[20] = PC0D + 0x30;
-					
-					//Send the InputStatus String
-					//	"INP_[PC7DIR][PC6DIR]...[PC0DIR]_[PC7D]{PC6D]...[PC0D]"
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputStatus, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-					
-					//Send the Acknowledgement String
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputRec, 14, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "OUC" - Output, PortC
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x4F){			//if RECWORLD == "OUC"
-			if(RecWorld[1] == 0x55){
-				if(RecWorld[2] == 0x43){
-					OutputRec[2] = 0x43;
-					for(count = 4; count < 21; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					//Set I/O Pin Direction based on PC App
-					PC7DIR = RecWorld[4];
-					PC6DIR = RecWorld[5];
-					PC5DIR = RecWorld[6];
-					PC4DIR = RecWorld[7];
-					PC3DIR = RecWorld[8];
-					PC2DIR = RecWorld[9];
-					PC1DIR = RecWorld[10];
-					PC0DIR = RecWorld[11];
-					
-					//Set I/O Pin Direction based on PC App
-					PC7D = RecWorld[13];
-					PC6D = RecWorld[14];
-					PC5D = RecWorld[15];
-					PC4D = RecWorld[16];
-					PC3D = RecWorld[17];
-					PC2D = RecWorld[18];
-					PC1D = RecWorld[19];
-					PC0D = RecWorld[20];
-					
-					//Return GPIO pin state within the acknowledgement string
-					OutputRec[13] = PC7D + 0x30;
-					OutputRec[14] = PC6D + 0x30;
-					OutputRec[15] = PC5D + 0x30;
-					OutputRec[16] = PC4D + 0x30;
-					OutputRec[17] = PC3D + 0x30;
-					OutputRec[18] = PC2D + 0x30;
-					OutputRec[19] = PC1D + 0x30;
-					OutputRec[20] = PC0D + 0x30;
-					
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(OutputRec, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "INB" - Input, PortB
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x49){			//if RECWORLD == "INB"
-			if(RecWorld[1] == 0x4E){
-				if(RecWorld[2] == 0x42){
-					InputStatus[2] = 0x42;
-					InputRec[2] = 0x42;
-					for(count = 4; count < 12; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					
-					//For Port C GPIO, we can only control two GPIOs due to
-					//other functionality.  Please see comments below
-					
-					//Set PORTC to Input or Output based on PC application
-					PB7DIR = RecWorld[4]; 
-					//PC6DIR = RecWorld[5];		//I2C SDA
-					//PC5DIR = RecWorld[6];		//SPI SCLK/I2C SCL
-					//PC4DIR = RecWorld[7];		//SPI MOSI
-					//PC3DIR = RecWorld[8];		//SPI MISO
-					PB2DIR = RecWorld[9];
-					//PC1DIR = RecWorld[10];	//UART TX
-					//PC0DIR = RecWorld[11];	//UART RX
-					
-					//Format I/O Direction into output string
-					InputStatus[4] = PB7DIR + 0x30;
-					InputStatus[5] = 0x78;
-					InputStatus[6] = 0x78;
-					InputStatus[7] = 0x78;
-					InputStatus[8] = 0x78;
-					InputStatus[9] = PB2DIR + 0x30;
-					InputStatus[10] = 0x78;
-					InputStatus[11] = 0x78;
-					
-					//Format I/O Level into output string
-					InputStatus[13] = PB7D + 0x30;
-					InputStatus[14] = 0x78;
-					InputStatus[15] = 0x78;
-					InputStatus[16] = 0x78;
-					InputStatus[17] = 0x78;
-					InputStatus[18] = PB2D + 0x30;
-					InputStatus[19] = 0x78;
-					InputStatus[20] = 0x78;
-					
-					//Send the InputStatus String
-					//	"INB_[PC7DIR][PC6DIR]...[PC0DIR]_[PC7D]{PC6D]...[PC0D]"
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputStatus, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-					
-					//Send the Acknowledgement String
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputRec, 14, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "OUB" - Output, PortB
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x4F){			//if RECWORLD == "OUB"
-			if(RecWorld[1] == 0x55){
-				if(RecWorld[2] == 0x42){
-					OutputRec[2] = 0x42;
-					for(count = 4; count < 21; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					//Set I/O Pin Direction based on PC App
-					PB7DIR = RecWorld[4];
-					//PB6DIR = RecWorld[5];
-					//PB5DIR = RecWorld[6];
-					//PB4DIR = RecWorld[7];
-					//PB3DIR = RecWorld[8];
-					PB2DIR = RecWorld[9];
-					//PB1DIR = RecWorld[10];
-					//PB0DIR = RecWorld[11];
-					
-					//Set I/O Pin Direction based on PC App
-					PB7D = RecWorld[13];
-					//PB6D = RecWorld[14];
-					//PB5D = RecWorld[15];
-					//PB4D = RecWorld[16];
-					//PB3D = RecWorld[17];
-					PB2D = RecWorld[18];
-					//PB1D = RecWorld[19];
-					//PB0D = RecWorld[20];
-					
-					//Return GPIO pin state within the acknowledgement string
-					OutputRec[13] = PB7D + 0x30;
-					OutputRec[14] = 0x78;
-					OutputRec[15] = 0x78;
-					OutputRec[16] = 0x78;
-					OutputRec[17] = 0x78;
-					OutputRec[18] = PB2D + 0x30;
-					OutputRec[19] = 0x78;
-					OutputRec[20] = 0x78;
-					
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(OutputRec, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "IND" - Input, Port D
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x49){			//if RECWORLD == "IND"
-			if(RecWorld[1] == 0x4E){
-				if(RecWorld[2] == 0x44){
-					InputStatus[2] = 0x44;
-					InputRec[2] = 0x44;
-					for(count = 4; count < 12; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					
-					//Set PORTD to Input or Output based on PC application
-					//PC7DIR = RecWorld[4];
-					//PC6DIR = RecWorld[5];
-					PD5DIR = RecWorld[6];
-					PD4DIR = RecWorld[7];
-					PD3DIR = RecWorld[8];
-					PD2DIR = RecWorld[9];
-					PD1DIR = RecWorld[10];
-					PD0DIR = RecWorld[11];
-					
-					//Format I/O Direction into output string
-					InputStatus[4] = 0x78;
-					InputStatus[5] = 0x78;
-					InputStatus[6] = PD5DIR + 0x30;
-					InputStatus[7] = PD4DIR + 0x30;
-					InputStatus[8] = PD3DIR + 0x30;
-					InputStatus[9] = PD2DIR + 0x30;
-					InputStatus[10] = PD1DIR + 0x30;
-					InputStatus[11] = PD0DIR + 0x30;
-					
-					//Format I/O Level into output string
-					InputStatus[13] = 0x78;
-					InputStatus[14] = 0x78;
-					InputStatus[15] = PD5D + 0x30;
-					InputStatus[16] = PD4D + 0x30;
-					InputStatus[17] = PD3D + 0x30;
-					InputStatus[18] = PD2D + 0x30;
-					InputStatus[19] = PD1D + 0x30;
-					InputStatus[20] = PD0D + 0x30;
-					
-					//Send the InputStatus String
-					//	"INP_[PC7DIR][PC6DIR]...[PC0DIR]_[PC7D]{PC6D]...[PC0D]"
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputStatus, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-					
-					//Send the Acknowledgement String
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(InputRec, 14, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-		
-		//Check UART Receive String for "OUD" - Output, PortD
-		//This section is triggered by the GPIO command tab
-		if(RecWorld[0] == 0x4F){			//if RECWORLD == "OUD"
-			if(RecWorld[1] == 0x55){
-				if(RecWorld[2] == 0x44){
-					OutputRec[2] = 0x44;
-					for(count = 4; count < 21; count++)
-					{ 
-						RecWorld[count] -= 0x30;
-						if(RecWorld[count] != (0x01||0x00)){
-							RecWorld[count] = 0;
-						}
-					}
-					//Set I/O Pin Direction based on PC App
-					//PC7DIR = RecWorld[4];
-					//PC6DIR = RecWorld[5];
-					PD5DIR = RecWorld[6];
-					PD4DIR = RecWorld[7];
-					PD3DIR = RecWorld[8];
-					PD2DIR = RecWorld[9];
-					PD1DIR = RecWorld[10];
-					PD0DIR = RecWorld[11];
-					
-					//Set I/O Pin Direction based on PC App
-					//D7D = RecWorld[13];
-					//PD6D = RecWorld[14];
-					PD5D = RecWorld[15];
-					PD4D = RecWorld[16];
-					PD3D = RecWorld[17];
-					PD2D = RecWorld[18];
-					PD1D = RecWorld[19];
-					PD0D = RecWorld[20];
-					
-					//Return GPIO pin state within the acknowledgement string
-					OutputRec[13] = 0x78;
-					OutputRec[14] = 0x78;
-					OutputRec[15] = PD5D + 0x30;
-					OutputRec[16] = PD4D + 0x30;
-					OutputRec[17] = PD3D + 0x30;
-					OutputRec[18] = PD2D + 0x30;
-					OutputRec[19] = PD1D + 0x30;
-					OutputRec[20] = PD0D + 0x30;
-					
-					_flgUartFin = 0;
-					uart_stop();
-					uart_startSend(OutputRec, 23, _funcUartFin);
-					while(_flgUartFin != 1){
-						NOP1000();
-						main_clrWDT();
-					}
-				}
-			}
-		}
-				
-		//Start I2C Write Sequence
-		//This section is triggered by the write portion of the I2C command tab
-		if(RecWorld[0] == 0x49){			//if RECWORLD == "I2CTX"
-			if(RecWorld[1] == 0x32){
-				if(RecWorld[2] == 0x43){
-					if(RecWorld[3] == 0x54){
-						if(RecWorld[4] == 0x58){
-							//if RECWORLD = "I2CTX" then begin waiting for the I2C sequence to be sent
-							// The Sequence will be stored in I2C_BUFF
-							_flgUartFin = 0;
-							uart_stop();
-							uart_startReceive(I2C_BUFF, 46, _funcUartFin);
-							while(_flgUartFin != 1){
-								NOP1000();
-								main_clrWDT();
-							}
-							
-							//This next section will begin parsing the character string into their respective values
-							chari = 2;
-							charj = 0;
-							chark = 0;
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30);}
-								I2CAdd += I2CAdd_temp;
-							}
-							chari++;
-							charj = 0;
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30);}
-								I2CNumBytes += I2CNumBytes_temp;
-							}
-							chari++;
-							charj = 0;
-							
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data0Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data0Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data0Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data0Str += Data0Str_temp;
-							}
-							chari++;
-							charj = 0;
-							
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data1Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data1Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data1Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data1Str += Data1Str_temp;
-							}
-							chari++;
-							charj = 0;
+		//HLT = 1;	//Confirmed that this works... tested using WDT = 8sec and it does take that much time to get back into the loop.
+					//For now, lets comment this out so we know operation works correctly
+		goto Loop;
+}
 
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data2Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data2Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data2Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data2Str += Data2Str_temp;
-							}
-							chari++;
-							charj = 0;
-
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data3Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data3Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data3Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data3Str += Data3Str_temp;
-							}
-							chari++;
-							charj = 0;
-
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data4Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data4Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data4Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data4Str += Data4Str_temp;
-							}
-							chari++;
-							charj = 0;
-
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data5Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data5Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data5Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data5Str += Data5Str_temp;
-							}
-							chari++;
-							charj = 0;
-
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data6Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data6Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data6Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data6Str += Data6Str_temp;
-							}
-							chari++;
-							charj = 0;
-
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){Data7Str_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){Data7Str_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {Data7Str_temp = (I2C_BUFF[chari-chark]-0x30);}
-								Data7Str += Data7Str_temp;
-							}
-							chari++;
-							charj = 0;							
-							
-							//Now that I2C message info has been parsed, we will restructure them into the I2CSendInfo String...
-							I2CSendInfo[0] = Data0Str;
-							I2CSendInfo[1] = Data1Str;
-							I2CSendInfo[2] = Data2Str;
-							I2CSendInfo[3] = Data3Str;
-							I2CSendInfo[4] = Data4Str;
-							I2CSendInfo[5] = Data5Str;
-							I2CSendInfo[6] = Data6Str;
-							I2CSendInfo[7] = Data7Str;
-							
-							//This will reset our starting temp variables to 0 as we are now done with these variables.
-							Data0Str = Data1Str = Data2Str = Data3Str = Data4Str = Data5Str = Data6Str = Data7Str = 0;
-							
-							//Now we can start the I2C send based on the info from the PC App
-							_flgI2CFin = 0;														//reset I2C completed flag
-							i2c_stop();															//Make sure I2C is not currently running
-							i2c_startSend( I2CAdd, &I2CSendInfo, I2CNumBytes, &I2CSendInfo, 0, (cbfI2c)_funcI2CFin);		//Begin I2C Recieve Command
-							while(_flgI2CFin != 1){												//Wait for I2C commands to finish transfer
-								NOP1000();
-								main_clrWDT();
-							}
-							
-							//Reset All original variables to a 0 state
-							I2CAdd = 0;
-							I2CNumBytes = 0;
-							chari = 0;
-							for(chari = 0; chari < 8; chari++){
-								I2CSendInfo[chari] = 0;
-							}
-							
-							//Send the final UART message to PC saying that this transaction was successful.
-							_flgUartFin = 0;
-							uart_stop();
-							uart_startSend(I2C_TX_REC, 21, _funcUartFin);
-							while(_flgUartFin != 1){
-								NOP1000();
-								main_clrWDT();
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		//I2C Read Sequence
-		//This section is triggered by the read portion of the I2C command tab
-		if(RecWorld[0] == 0x49){			//if RECWORLD == "I2CRX"
-			if(RecWorld[1] == 0x32){
-				if(RecWorld[2] == 0x43){
-					if(RecWorld[3] == 0x52){
-						if(RecWorld[4] == 0x58){
-							//if RECWORLD = "I2CRX" then begin waiting for the I2C sequence to be sent
-							// The Sequence will be stored in I2C_BUFF
-							_flgUartFin = 0;
-							uart_stop();
-							uart_startReceive(I2C_BUFF, 46, _funcUartFin);
-							while(_flgUartFin != 1){
-								NOP1000();
-								main_clrWDT();
-							}
-							
-							//This next section will begin parsing the character string into their respective values
-							chari = 2;
-							charj = 0;
-							chark = 0;
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {I2CAdd_temp = (I2C_BUFF[chari-chark]-0x30);}
-								I2CAdd += I2CAdd_temp;
-							}
-							chari++;
-							charj = 0;
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {I2CNumBytes_temp = (I2C_BUFF[chari-chark]-0x30);}
-								I2CNumBytes += I2CNumBytes_temp;
-							}
-							chari++;
-							charj = 0;
-							
-							while(I2C_BUFF[chari]!=0x20){
-								chari++;
-								charj++;
-							}
-							for(chark = charj; chark>0; chark--){
-								if(chark == 3){RegAddr_temp = (I2C_BUFF[chari-chark]-0x30)*100;}
-								else if(chark == 2){RegAddr_temp = (I2C_BUFF[chari-chark]-0x30)*10;}
-								else {RegAddr_temp = (I2C_BUFF[chari-chark]-0x30);}
-								RegAddr += RegAddr_temp;
-							}
-							chari++;
-							charj = 0;
-							
-							//Now we can start the I2C Receive based on the info from the PC App
-							_flgI2CFin = 0;																	//reset I2C completed Flag
-							i2c_stop();																		//Make sure I2C is not currently running
-							i2c_startReceive(I2CAdd, &RegAddr, 1, &I2CReceInfo, I2CNumBytes, (cbfI2c)_funcI2CFin);	//Begin I2C Recieve Command
-							while(_flgI2CFin != 1){															//Wait for I2C commands to finish transfer
-								NOP1000();
-								main_clrWDT();
-							}
-							
-							//Send UART Message Returning the Values to the GUI!
-							//unsigned char	I2C_RX_Data[23] = {"I2CRX X X X X X X X X"}
-							//Note, that these values have not been converted into the Ascii Representation,
-							//Thus, these values will not be clearly visible in the GUI console
-							I2C_RX_Data[6] = I2CReceInfo[0];
-							I2C_RX_Data[8] = I2CReceInfo[1];
-							I2C_RX_Data[10] = I2CReceInfo[2];
-							I2C_RX_Data[12] = I2CReceInfo[3];
-							I2C_RX_Data[14] = I2CReceInfo[4];
-							I2C_RX_Data[16] = I2CReceInfo[5];
-							I2C_RX_Data[18] = I2CReceInfo[6];
-							I2C_RX_Data[20] = I2CReceInfo[7];
-							
-							_flgUartFin = 0;
-							uart_stop();
-							uart_startSend(I2C_RX_Data, 23, _funcUartFin);
-							while(_flgUartFin != 1){
-								NOP1000();
-								main_clrWDT();
-							}
-			
-							//Reset All original variables to a 0 state
-							I2CAdd = 0;
-							I2CNumBytes = 0;
-							RegAddr = 0;
-							chari = 0;
-							for(chari = 0; chari < 8; chari++){
-								I2CReceInfo[chari] = 0;
-							}
-							
-							//Send the final UART message to PC saying that this transaction was successful.
-							_flgUartFin = 0;
-							uart_stop();
-							uart_startSend(I2C_RX_REC, 21, _funcUartFin);
-							while(_flgUartFin != 1){
-								NOP1000();
-								main_clrWDT();
-							}
-						}
-					}
-				}
-			}
-		}
-		goto RX_Loop;
-		
-}//end main
+/* 	// Originally intended to use this for Low Power operation, but now will use the WDT to trigger it.
+	// IRQ and function definition needs to be initialized to use this function.
+static void TBC_ISR( void ) 
+{
+	//HLT = 0;
+	
+}
+*/
 
 //===========================================================================
 //  	End of MAIN FUNCTION
@@ -1021,26 +268,7 @@ void main_clrWDT( void )
 	WDTCON = 0xA5u;
 }
 
-/*******************************************************************************
-	Routine Name:	NOP1000
-	Form:			void NOP( void )
-	Parameters:		void
-	Return value:	void
-	Description:	NOP for 1000 Cycles.
-******************************************************************************/
-void NOP1000( void )
-{
-unsigned int ONCNT = 0;
-
-	while(ONCNT < 1000) {	// NOP for 1000 Cycles
-		ONCNT++;
-	}
-	ONCNT = 0;			// Reset Counter 
-}
-
-
-
-//===========================================================================
+//==========================================================================
 //	Initialize Micro to Desired State...
 //===========================================================================
 static void Initialization(void){
@@ -1048,14 +276,14 @@ static void Initialization(void){
 	//Initialize Peripherals	
 	//BLKCON2 Control Bits...Manually Set 4/12/2013
 	DSIO0 = 1; // 0=> Enables Synchronous Serial Port 0 (initial value).
-	DUA0  = 0; // 0=> Enables the operation of UART0 (initial value).
+	DUA0  = 1; // 0=> Enables the operation of UART0 (initial value).
 	DUA1  = 1; // 0=> Enables Uart1 (initial value). 
 	DI2C1 = 1; // 0=> Enables I2C bus Interface (Slave) (initial value).
 	DI2C0 = 0; // 0=> Enables I2C bus Interface (Master) (initial value).	
 	
 	BLKCON4 = 0x00; // 0=> Enables SA-ADC
 	BLKCON6 = 0x00; // (1=disables; 0=enables) the operation of Timers 8, 9, A, E, F.
-	BLKCON7 = 0x00; // (1=disables; 0=enables) the operation of PWW (PWMC, PWMD, PWME, PWMF
+	BLKCON7 = 0x0F; // (1=disables; 0=enables) the operation of PWM (PWMC, PWMD, PWME, PWMF
 
 	// Port Initialize
 	PortA_Low();	//Initialize all 3 Ports of Port A to GPIO-Low
@@ -1065,30 +293,6 @@ static void Initialization(void){
 
 	// Set Oscillator Rate
     SetOSC();
-
-    
-	// TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
-	// TIMER SETUP
-	Setup_Timer_8:
-	// Reset TIMER DATA REGISTER...
-	TM8D    = 0;	//Timer 8 DATA Register
-	// Reset TIMER CLOCK REGISTER...
-	TM8C    = 0;	//Timer 8 CLOCK Register
-	// TIMER-8 Control...
-	//   CONTROL-0 Register:
-	// Operation Clock for Timer...
-	T8C1 = 0;	// 01 = HTBCLK  
-	T8C0 = 1;
-	// Count Mode...
-	T89M16 = 0;	// 0=8-Bit Mode; 1=16bit Mode...
-	//One-Shot or Normal Mode...
-	T8OST = 0;	// 0=Normal; 1=One-Shot...
-	//   CONTROL-1 Register:
-	// RUN Mode...
-	T8RUN = 0;	//0=STOP; 1=START...
-	// TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
-
-
 	
 	// IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 	// INTERRUPT SETUP...
@@ -1096,83 +300,54 @@ static void Initialization(void){
 	irq_init();	// Initialize Interrupts (All Off and NO Requests)
 
 	// INTERRUPT ENABLE REGISTERS...
-	//  IE0 = VOLTAGE LEVEL SUPERVISOR Int.
-	//  IE1 = EXTERNAL Ints on B1, B0, A2, A1, & A0
-	//  IE2 = SUCCESSIVE APPROXIMATION Int.
-	//  IE3 = TIMERS 8 & 9 Ints.
-	//  IE4 = UART & COMPARATOR Ints.
-	//  IE5 = TIMERS A, B, E & F Ints.
-	//  IE6 = PWMC &  128Hz & 32Hz TBC Ints.
-	//  IE7 = 16Hz & 2Hz TBC Ints.
 	IE0 = IE1 = IE2 = IE3 = IE4 = IE5 = IE6 = IE7 = 0;
-
 	// INTERRUPT REQUEST REGISTERS...
-	//  IRQ0 = WDT & VLS Int Requests
-	//  IRQ1 = EXTERNAL Int Requests
-	//  IRQ2 = SUCCESSIVE APPROXIMATION Int Requests
-	//  IRQ3 = TIMERS 8 & 9 Int Requests 
-	//  IRQ4 = UART & COMPARATOR Int Requests 
-	//  IRQ5 = TIMERS A, B, E & F Int Requests 
-	//  IRQ6 = PWMC &  128Hz & 32Hz TBC Int Requests 
-	//  IRQ7 = 16Hz & 2Hz TBC Int Requests 
 	IRQ0 = IRQ1 = IRQ2 = IRQ3 = IRQ4 = IRQ5 = IRQ6 = IRQ7 = 0;
-	E2H = 0; 	// E2H is the Enable flag for 2Hz TBC Interrupt (1=ENABLED)
+
+	E2H = 0;	// E2H is the Enable flag for 2Hz TBC Interrupt (1=ENABLED)
 				
 	(void)irq_setHdr( (unsigned char)IRQ_NO_UA0INT, _intUart );
+	EUA0 = 1; 	// EUA0 is the enable flag for the UART0 interrupt (1=ENABLED)
+	
 	(void)irq_setHdr( (unsigned char)IRQ_NO_I2CMINT, _intI2c );
-		
 	EI2CM = 1;
 	QI2CM = 1;
-	EUA0 = 1; // EUA0 is the enable flag for the UART0 interrupt (1=ENABLED)
-		
+	
+	/*
+	//Set up xHz TBC Interrupt (Options: 128Hz, 32Hz, 16Hz, 2Hz)
+	//(void)irq_setHdr( (unsigned char)IRQ_NO_T2HINT, TBC_ISR );  //Clear interrupt request flag
+	
+	// TBC...Set Ratio: : 1:1 => 1_1
+	(void)tb_setHtbdiv( (unsigned char)TB_HTD_1_1 ); //Set the ratio of dividing frequency of the time base counter
+		E2H = 0;	  // Enable x Hz TBC Interrupt (1=ENABLED)
+		Q2H = 0;	  // Request flag for the time base counter x Hz interrupt	
+	*/
+	
 	irq_ei(); // Enable Interrupts
 	// IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 
-	// WDT...
-	WDTMOD = 0x03; 	// 0x03=overflow 8sec...
+	// WDT... This will be the triggering condition to return from halt mode
+	// We will need to calibrate based on the timing of our loop
+	// 0x00 = 125ms
+	// 0x01 = 500ms
+	// 0x02 = 2sec
+	// 0x03 = 8sec
+	// 0x04 = 23.4ms
+	// 0x05 = 31.25ms
+	// 0x06	= 62.5ms
+	WDTMOD = 0x03; 	
 	main_clrWDT(); 	// Clear WDT
 	
 	//Add EOL characters to strings
 	HelloWorld[12] 	= 0x0D;
 	HelloWorld[13] 	= 0x0A;
-	InputStatus[21] 	= 0x0D;
-	InputStatus[22] 	= 0x0A;
-	InputRec[12] 	= 0x0D;
-	InputRec[13] 	= 0x0A;
-	OutputRec[21] 	= 0x0D;
-	OutputRec[22] 	= 0x0A;
-	AckMCUConn[20] 	= 0x0D;
-	AckMCUConn[21] 	= 0x0A;
-	NackMCUConn[60] = 0x0D;
-	NackMCUConn[61] = 0x0A;
-	ListFWRev[20] = 0x0D;
-	ListFWRev[21] = 0x0A;
-	I2C_TX_REC[19] = 0x0D;
-	I2C_TX_REC[20] = 0x0A;
-	I2C_RX_REC[19] = 0x0D;
-	I2C_RX_REC[20] = 0x0A;
-	I2C_RX_Data[21] = 0x0D;
-	I2C_RX_Data[22] = 0x0A;
 	
 	//I2C Initialization...
 	//P20C0 = 1;	/* CMOS output */
 	//P20C1 = 1;	
-	//P20D = 1;	/* write protect enable */
+	//P20D = 1;		/* write protect enable */
 	(void)i2c_init(I2C_MOD_FST, (unsigned short)HSCLK_KHZ, I2C_SYN_OFF);
 	
-	//UART Initialization...
-	(void)uart_init( (unsigned char)UART_CS_HSCLK,		/* Generator       */
-			     (unsigned short)HSCLK_KHZ,		/* HSCLK frequency */
-			     &_uartSetParam );				/* Param... 	 */
-	uart_PortSet();
-	_flgUartFin = 0;
-	uart_stop();
-		
-	uart_startSend(HelloWorld, 14, _funcUartFin); // Send, "Hello World!"
-	while(_flgUartFin != 1){
-		NOP1000();
-		main_clrWDT();
-	}
 }//End Initialization
 //===========================================================================
 
@@ -1220,27 +395,6 @@ static void _intI2c( void )
 }
 
 /*******************************************************************************
-	Routine Name:	checkI2C
-	Form:			void checkI2C( void )
-	Parameters:		void
-	Return value:	void
-	Description:	Reading or writing processing of I2C Bus.
-******************************************************************************/
-void checkI2C( void )
-{
-int		ret;
-	
-	ret = 0;
-	//P21C1 = 1;
-	while (ret != 1) {
-		ret = i2c_continue();
-		if( ret == 1 ) {
-			//P21C1 = 0;
-		}
-	}
-}
-
-/*******************************************************************************
 	Routine Name:	main_reqNotHalt
 	Form:			void reqNotHalt( void )
 	Parameters:		void
@@ -1261,7 +415,7 @@ void main_reqNotHalt( void )
 ******************************************************************************/
 static void _intUart( void )
 {
-		uart_continue(); //in UART.c: process to continue send and receive...
+	uart_continue(); 	//in UART.c: process to continue send and receive...
 }
 
 //===========================================================================
@@ -1284,47 +438,6 @@ static void SetOSC(void){
 	__EI();			//INT enable
 }
 //===========================================================================
-
-
-//===========================================================================
-//	Analog Comparator setup
-//===========================================================================
-void analog_comparator(void){
-
-//Carl's Notes...
-
-//Step 1: Select the Interrupt Mode
-// 	a.) Interrupt Disabled      => CMPxE1 = 0; CMPxE0 = 0;	  
-// 	b.) Falling-Edge Int. Mode  => CMPxE1 = 0; CMPxE0 = 1;
-// 	c.) Rising-Edge Int. Mode   => CMPxE1 = 1; CMPxE0 = 0;
-// 	d.) Both-Edge Int. Mode     => CMPxE1 = 1; CMPxE0 = 1;
-
-
-//Step 2: Enable the Comparator                       => CMPxEN = 1;	
-
-//Step 3: Wait 3ms to allow Comparator to stabilize
-
-//Step 4: Read the comparison result			=> CMPxD: 0= +<-; 1= +>-
-
-//Step 5: Disable the Comparator				=> CMPxEN = 0;	
-
-
-
-   //Comparator 0...
-	CMP0EN  = 0x01; 	// Comparator ON...
-	CMP0E1  = 0x00; 	// No Interupt...
-	CMP0E0  = 0x00;
-	CMP0SM1 = 0x00; 	// Detect without Sampling... 
-	CMP0RFS = 0x01; 	// Differential Input on B5
-
-   //Comparator 0 OFF
-	CMP0EN  = 0x00;
-
-
-}
-//===========================================================================
-
-
 
 //===========================================================================
 //	Clear All 3 Bits of Port A
@@ -1365,7 +478,6 @@ void PortA_Low(void){
 	PA2D = 0;		// A.2 Output OFF....
 
 	main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -1438,7 +550,6 @@ void PortB_Low(void){
 	PB7D = 0;		// B.7 Output OFF....
 
 	main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -1556,51 +667,9 @@ void PortD_Low(void){
 	PD4D = 0;		// D.4 Output OFF....
 	PD5D = 0;		// D.5 Output OFF....
 
-
 	main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
-
-//===========================================================================
-//	Set All 3 Bits of Port A as Digital Input Pins
-//===========================================================================
-void PortA_Digital_Inputs(void){
-
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Set Pin Data...
-
-	//Direction...	
-	PA0DIR = 1;		// PortA Bit0 set to Input Mode...
-	PA1DIR = 1;		// PortA Bit1 set to Input Mode...
-	PA2DIR = 1;		// PortA Bit2 set to Input Mode...
-
-
-	//I/O Type...
-	PA0C1  = 1;		// PortA Bit0 set to Input with Pull-Up Resistor...
-	PA0C0  = 0;		
-	PA1C1  = 1;		// PortA Bit1 set to Input with Pull-Up Resistor...
-	PA1C0  = 0;	
-	PA2C1  = 1;		// PortA Bit2 set to Input with Pull-Up Resistor...
-	PA2C0  = 0;	
-
-	//Purpose...
-	PA0MD1  = 0;	// PortA Bit0 set to General Purpose I/O...
-	PA0MD0  = 0;	
-	PA1MD1  = 0;	// PortA Bit1 set to General Purpose I/O...
-	PA1MD0  = 0;	
-	PA2MD1  = 0;	// PortA Bit2 set to General Purpose I/O...
-	PA2MD0  = 0;	
-
-	main_clrWDT(); 	// Clear WDT
-
-}
-//===========================================================================
-
 
 
 //===========================================================================
@@ -1647,6 +716,5 @@ void PinB0_PWM(void){
 	PWCD =    12;		//12    ~  0.25 % duty cycle @ 160Hz
 
 	PCRUN = 0;		// OFF to start
-
 }
 //===========================================================================
