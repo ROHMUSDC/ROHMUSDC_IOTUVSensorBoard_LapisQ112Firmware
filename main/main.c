@@ -188,17 +188,22 @@ void _funcI2CFin( unsigned int size, unsigned char errStat );
 void main_reqNotHalt( void );
 void _intUart( void );
 void _intI2c( void );
+void _intADC( void );
+void NOPms( unsigned int ms );
 //*****************************************************************************
 
 //GLOBALS...
 //UART and I2C Variables
 unsigned char	_flgUartFin;
 unsigned char 	_flgI2CFin;
+unsigned char	_flgADCFin;
 unsigned char	_reqNotHalt;
 
 //General Variables
 unsigned char	HelloWorld[14] = 	{"Hello World!  "};
 unsigned int	Test = 0;
+unsigned int	UVReturn = 0;
+unsigned int	ScaledUVReturn = 0;
 
 unsigned int ret;
 unsigned int testI2C;
@@ -219,9 +224,23 @@ Init:
 Loop:	
 		main_clrWDT();
 		
-		Test ^= 1;
+		_flgADCFin = 0;
+	//Get UV Sensor Data Reading
+		SARUN = 1;					//Start Obtaining ADC Info
+		while(_flgADCFin == 0)		//Wait for ADC to finish running
+		{
+			main_clrWDT();
+		}		
+		UVReturn = (SADR1L>>6)+(SADR1H<<2);		//Format RAW UV Sensor Output
+		//Get Raw value and Scaled Index Value
+
+		//Wait for Manchester Encoded Input... On Second thought, there is no reason for why we need to take input commands for CHicago demo... Thus, I think we can leave this out for now.
+		//Send back Manchester Encoded Signal Back with Raw and Indexed result	
 		
-		//HLT = 1;	//Confirmed that this works... tested using WDT = 8sec and it does take that much time to get back into the loop.
+		Test ^= 1;	//Function Code Goes here
+
+		
+		HLT = 1;	//Confirmed that this works... tested using WDT = 8sec and it does take that much time to get back into the loop.
 					//For now, lets comment this out so we know operation works correctly
 		goto Loop;
 }
@@ -290,7 +309,21 @@ static void Initialization(void){
 	PortB_Low();	//Initialize all 8 Ports of Port B to GPIO-Low
 	PortC_Low();	//Initialize all 8 Ports of Port C to GPIO-Low
 	PortD_Low();	//Initialize all 6 Ports of Port D to GPIO-Low
-
+	
+	//----- Applicable Port Settings -----
+	
+	// Settings for the Enable pin for the UV Sensor
+	PA0DIR = 0;		
+	PA0C0 = 0;		
+	PA0C1 = 0;		
+	PA0MD0 = 0;
+	PA0MD1 = 0;
+	
+	// Settings for the ADC input for the output of the UV sensor
+	PA1DIR = 1;		//GPIO Input
+	SACH1 = 1;		//This enables the ADC Channel 1 from the corrected pin
+	SALP = 0;		//Single Read or Continuous Read... Single = 0, Consecutive = 1
+	
 	// Set Oscillator Rate
     SetOSC();
 	
@@ -311,7 +344,12 @@ static void Initialization(void){
 	
 	(void)irq_setHdr( (unsigned char)IRQ_NO_I2CMINT, _intI2c );
 	EI2CM = 1;
-	QI2CM = 1;
+	QI2CM = 0;
+	
+	//Enable ADC Interrupts Handler
+	(void)irq_setHdr( (unsigned char)IRQ_NO_SADINT, _intADC );
+	ESAD = 1;
+	QSAD = 0;
 	
 	/*
 	//Set up xHz TBC Interrupt (Options: 128Hz, 32Hz, 16Hz, 2Hz)
@@ -392,6 +430,18 @@ static void _intI2c( void )
 {
 	(void)i2c_continue();
 	main_reqNotHalt();
+}
+
+/*******************************************************************************
+	Routine Name:	_intADC
+	Form:			static void _intADC( void )
+	Parameters:		void
+	Return value:	void
+	Description:	I2C handler.
+******************************************************************************/
+static void _intADC( void )
+{
+	_flgADCFin = 1;
 }
 
 /*******************************************************************************
@@ -672,49 +722,66 @@ void PortD_Low(void){
 //===========================================================================
 
 
-//===========================================================================
-//	PWM Output on Port B - Pin 0
-//===========================================================================
-void PinB0_PWM(void){
+/*******************************************************************************
+	Routine Name:	NOPms
+	Form:			void NOP1000( unsigned int ms )
+	Parameters:		unsigned int sec = "Number of seconds where the device is not doing anything"
+	Return value:	void
+	Description:	NOP for x seconds. Uses HTB* clock (512kHz) and timer 8+9 (max 0xFFFF)
+					*(HTBCLK = 1/16 * HSCLK = (1/16)*8192kHz = 512kHz, see HTBDR to change if we need an even smaller increment timer...)
+					1/(512kHz) * 0xFFFF = 127ms
+					
+******************************************************************************/
+void NOPms( unsigned int ms )
+{
+unsigned int timerThres;
+unsigned char TimeFlag;
+unsigned int TempSec;
+unsigned int timer;
+unsigned int timertest;
 
-//Carl's Notes...
+	TempSec = ms;
+	TimeFlag = 0;
 
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Select the Clock Mode...
-//Step 5: Set the Duty Cycle...
-//Step 5: Start the PWM Counter...
+	tm_init(TM_CH_NO_AB);
+	tm_setABSource(TM_CS_HTBCLK);
+	tm_setABData(0xffff);
 
-	//Direction...	
-	PB0DIR = 0;		// PortB Bit0 set to Output Mode...
+	if(ms < 128){
+		timerThres = 0x1FF * ms;
+		TimeFlag = 0;
+	}
+	if(ms == 128){
+		timerThres = 0xFFFF;
+		TimeFlag = 0;
+	}
+	if(ms > 128){
+		while(TempSec > 128){
+			TempSec -= 128;
+			TimeFlag++;
+		}
+		if(TempSec != 0){
+			timerThres = 0x1FF * TempSec;
+		}
+		else{
+			timerThres = 0xFFFF;
+			TimeFlag--;
+		}
+	}
 
-	//I/O Type...
-	PB0C1  = 1;		// PortB Bit0 set to CMOS Output...
-	PB0C0  = 1;		
-
-	//Purpose...
-	PB0MD1  = 0;	// PortB Bit0 set to PWM Output (0,1)...
-	PB0MD0  = 1;	
-
-
-	//Select the Clock Mode...
-	PCCS1 = 0;	//00= LS; 01=HS; 10=PLL
-	PCCS0 = 1;
-
-	//SET THE PERIOD...(Added Feb 4th, 2013)
-	PWCP = 4250;		// Init Period to (1=255kHz; 10=46kHz; 50=10kHz; 200=2.5kH; ; 3185 = 160Hz; 3400=150Hz; 4250=120Hz; 5000=102Hz)
-
-	//SET THE DUTY CYCLE...(Added Feb 15th, 2013)
-
-	//PWCD =    10;		//10    ~  0.2  % duty cycle @ 120Hz
-	//PWCD =   100;		//100   ~  2.4  % duty cycle @ 120Hz
-	//PWCD =  1000;		//1000  ~ 23.5  % duty cycle @ 120Hz
-	//PWCD =  4000;		//4000  ~ 94.0  % duty cycle @ 120Hz
-	//PWCD =  4150;		//4150  ~ 99.0  % duty cycle @ 120Hz
-	//PWCD =    20;		//20    ~  0.4  % duty cycle @ 120Hz	
-	PWCD =    12;		//12    ~  0.25 % duty cycle @ 160Hz
-
-	PCRUN = 0;		// OFF to start
+TimerRestart:
+	main_clrWDT();	
+	//tm_restart89();	//using LSCLK, the maximum delay time we have is ~2 secs
+	tm_startAB();
+	timer = tm_getABCounter();
+	while(timer < timerThres){
+		timer = tm_getABCounter();
+		timertest = timer;
+	}
+	if(TimeFlag !=0){
+		tm_stopAB();
+		TimeFlag--;
+		timerThres = 0xFFFF;
+		goto TimerRestart;
+	}
 }
-//===========================================================================
