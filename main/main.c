@@ -200,10 +200,12 @@ unsigned char	_flgADCFin;
 unsigned char	_reqNotHalt;
 
 //General Variables
-unsigned char	HelloWorld[14] = 	{"Hello World!  "};
-unsigned int	Test = 0;
-unsigned int	UVReturn = 0;
-unsigned int	ScaledUVReturn = 0;
+static unsigned char	HelloWorld[14] = 	{"Hello World!  "};
+static unsigned int		Test = 0;
+static unsigned int		UVReturn = 0;
+static float			UVIndex = 0;
+static unsigned int		ScaledUVReturn = 0;
+static unsigned char	SensorReturn[50];
 
 unsigned int ret;
 unsigned int testI2C;
@@ -217,6 +219,7 @@ unsigned int testI2C;
 //===========================================================================
 int main(void) 
 {
+int i;
 
 Init:
 	Initialization(); //Ports, UART, Timers, Oscillator, Comparators, etc.
@@ -232,12 +235,56 @@ Loop:
 			main_clrWDT();
 		}		
 		UVReturn = (SADR1L>>6)+(SADR1H<<2);		//Format RAW UV Sensor Output
+		UVIndex = UVReturn*(0.04029)-12.49;
+		
+		//SensorReturnSM
+		for(i = 0; i<16; i++)
+		{
+			SensorReturn[i] = 0x20;
+		}
+		sprintf(SensorReturn, " UVI=%2.3f                ", UVIndex);
+		//SensorReturn[48] = 0x0D;
+		//SensorReturn[49] = 0x0A;
+		//SensorReturn[3] = 0x20;
+		SensorReturn[0] = 13;
+		//SensorReturn[15] = 8;
+		//SensorReturn[1] = 0x0A;
+		
+		//Send Returned Sensor Output to PC!
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 16, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		}
+		
+		//SensorReturnSM
+		for(i = 0; i<16; i++)
+		{
+			SensorReturn[i] = 0x20;
+		}
+		sprintf(SensorReturn, " ADC=%u          ", UVReturn);
+		//SensorReturn[48] = 0x0D;
+		//SensorReturn[49] = 0x0A;
+		//SensorReturn[3] = 0x20;
+		SensorReturn[0] = 13;
+		//SensorReturn[8] = 8;
+		//SensorReturn[1] = 0x0A;
+		
+		//Send Returned Sensor Output to PC!
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 16, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		}
+		
 		//Get Raw value and Scaled Index Value
 
 		//Wait for Manchester Encoded Input... On Second thought, there is no reason for why we need to take input commands for CHicago demo... Thus, I think we can leave this out for now.
 		//Send back Manchester Encoded Signal Back with Raw and Indexed result	
 		
-		Test ^= 1;	//Function Code Goes here
+		//Test ^= 1;	//Function Code Goes here
 
 		
 		HLT = 1;	//Confirmed that this works... tested using WDT = 8sec and it does take that much time to get back into the loop.
@@ -295,7 +342,7 @@ static void Initialization(void){
 	//Initialize Peripherals	
 	//BLKCON2 Control Bits...Manually Set 4/12/2013
 	DSIO0 = 1; // 0=> Enables Synchronous Serial Port 0 (initial value).
-	DUA0  = 1; // 0=> Enables the operation of UART0 (initial value).
+	DUA0  = 0; // 0=> Enables the operation of UART0 (initial value).
 	DUA1  = 1; // 0=> Enables Uart1 (initial value). 
 	DI2C1 = 1; // 0=> Enables I2C bus Interface (Slave) (initial value).
 	DI2C0 = 0; // 0=> Enables I2C bus Interface (Master) (initial value).	
@@ -313,11 +360,12 @@ static void Initialization(void){
 	//----- Applicable Port Settings -----
 	
 	// Settings for the Enable pin for the UV Sensor
-	PA0DIR = 0;		
-	PA0C0 = 0;		
-	PA0C1 = 0;		
-	PA0MD0 = 0;
-	PA0MD1 = 0;
+	PA2DIR = 0;		
+	PA2C0 = 1;		
+	PA2C1 = 1;		
+	PA2MD0 = 0;
+	PA2MD1 = 0;
+	PA2D = 1;
 	
 	// Settings for the ADC input for the output of the UV sensor
 	PA1DIR = 1;		//GPIO Input
@@ -373,7 +421,7 @@ static void Initialization(void){
 	// 0x04 = 23.4ms
 	// 0x05 = 31.25ms
 	// 0x06	= 62.5ms
-	WDTMOD = 0x03; 	
+	WDTMOD = 0x01; 	
 	main_clrWDT(); 	// Clear WDT
 	
 	//Add EOL characters to strings
@@ -385,6 +433,19 @@ static void Initialization(void){
 	//P20C1 = 1;	
 	//P20D = 1;		/* write protect enable */
 	(void)i2c_init(I2C_MOD_FST, (unsigned short)HSCLK_KHZ, I2C_SYN_OFF);
+	
+	//UART Initialization...
+	(void)uart_init( (unsigned char)UART_CS_HSCLK,		/* Generator       */
+			     (unsigned short)HSCLK_KHZ,				/* HSCLK frequency */
+			     &_uartSetParam );						/* Param... 	 */
+	uart_PortSet();
+	
+	_flgUartFin = 0;
+	uart_stop();	
+	uart_startSend(HelloWorld, 15, _funcUartFin); // Send, "Hello World!"
+	while(_flgUartFin != 1){
+		main_clrWDT();
+	}		
 	
 }//End Initialization
 //===========================================================================
