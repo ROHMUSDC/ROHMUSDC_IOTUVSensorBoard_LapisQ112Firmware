@@ -308,8 +308,12 @@ Loop:
 		}		
 		UVReturn = (SADR1L>>6)+(SADR1H<<2);		//Format RAW UV Sensor Output
 		UVIndex = UVReturn*(0.04029)-12.49;
-	  
-	    sprintf(SensorReturn,"UVI= %2.2f        ",UVIndex); 
+		if(UVIndex >= 10){
+			UVIndex = 10;
+		}
+		
+	    //sprintf(SensorReturn,"UVI= %2.2f        ",UVIndex); 
+		sprintf(SensorReturn,"UVI= %2.2u        ",UVIndex); 
      
 		//Send Returned Sensor Output to PC!
 		_flgUartFin = 0;
