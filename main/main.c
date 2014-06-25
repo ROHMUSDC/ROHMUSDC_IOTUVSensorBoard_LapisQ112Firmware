@@ -8,7 +8,7 @@
 // Updated:	 June 14th, 2014
 //*****************************************************************************
 
-/* ============================= IOT Board Specs ============================== 
+// ============================= IOT Board Specs ============================== 
 //	Needed Section:
 //	Pin A0 = UV Enable Signal	= Need to be analog output
 //	Pin A1 = UV Raw Output		= Need to be an ADC input
@@ -30,7 +30,7 @@
 //		Pin D5 = LED5			= Need to be analog Output
 //	Unused Block:
 //		Pins C0 to C7
-// ============================= IOT Board Specs ============================== */
+// ============================= IOT Board Specs ============================== 
 
 //*****************************************************************************
 // Microcontroller's connections on the LaPi Development Board to the 
@@ -200,12 +200,14 @@ unsigned char	_flgADCFin;
 unsigned char	_reqNotHalt;
 
 //General Variables
-static unsigned char	HelloWorld[14] = 	{"Hello World!  "};
+static unsigned char	HelloWorld[17] = 	{"UV Sensor Demo"};
+static unsigned char    UV_DETECTED[16] = {"  UV DETECTED! "};
 static unsigned int		Test = 0;
 static unsigned int		UVReturn = 0;
-static float			UVIndex = 0;
+static unsigned int		UV_Offset;
+static float			UVIndex;
 static unsigned int		ScaledUVReturn = 0;
-static unsigned char	SensorReturn[50];
+static unsigned char	SensorReturn[50]; 
 
 unsigned int ret;
 unsigned int testI2C;
@@ -219,14 +221,84 @@ unsigned int testI2C;
 //===========================================================================
 int main(void) 
 {
-int i;
+int i,c,d;
 
 Init:
 	Initialization(); //Ports, UART, Timers, Oscillator, Comparators, etc.
-
-Loop:	
-		main_clrWDT();
+ 
+		for(i=0;i<49;i++)
+		{
+			main_clrWDT(); 
+			SensorReturn[i] = 0x20;
+		}
 		
+		SensorReturn[0] = 12;   
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 1, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+		 
+		
+		for ( c = 1 ; c <= 1000 ; c++ )
+		{
+			for ( c = 1 ; c <= 1000 ; c++ )
+			{}
+		} 
+			 
+		SensorReturn[0] = 128; 
+		SensorReturn[1] = 13;  
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 2, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+	 
+		
+		 
+		SensorReturn[0] = 0x20; 
+		SensorReturn[1] = 214; 
+		SensorReturn[2] = 215; 
+		SensorReturn[3] = 220;  
+		SensorReturn[4] = 22;  
+		SensorReturn[5] = 0x20; 
+		SensorReturn[6] = 128; 
+		//SensorReturn[6] = 13;
+	 
+	 
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 7, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+     
+		 
+	    sprintf(SensorReturn, "UV SENSOR DEMO", 0); 
+		
+		SensorReturn[14] = 13; 
+		
+		//Send Returned Sensor Output to PC!
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 15, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+			    
+		SARUN = 1;					//Start Obtaining ADC Info
+		while(_flgADCFin == 0)		//Wait for ADC to finish running
+		{
+			main_clrWDT();
+		}		
+		UV_Offset = (SADR1L>>6)+(SADR1H<<2);	 
+		UV_Offset += 5; 
+Loop:	
+
+		main_clrWDT();
+ 			
 		_flgADCFin = 0;
 	//Get UV Sensor Data Reading
 		SARUN = 1;					//Start Obtaining ADC Info
@@ -236,61 +308,89 @@ Loop:
 		}		
 		UVReturn = (SADR1L>>6)+(SADR1H<<2);		//Format RAW UV Sensor Output
 		UVIndex = UVReturn*(0.04029)-12.49;
-		
-		//SensorReturnSM
-		for(i = 0; i<16; i++)
-		{
-			SensorReturn[i] = 0x20;
-		}
-		sprintf(SensorReturn, " UVI=%2.3f                ", UVIndex);
-		//SensorReturn[48] = 0x0D;
-		//SensorReturn[49] = 0x0A;
-		//SensorReturn[3] = 0x20;
-		SensorReturn[0] = 13;
-		//SensorReturn[15] = 8;
-		//SensorReturn[1] = 0x0A;
-		
+	  
+	    sprintf(SensorReturn,"UVI= %2.2f        ",UVIndex); 
+     
 		//Send Returned Sensor Output to PC!
 		_flgUartFin = 0;
 		uart_stop();
-		uart_startSend(SensorReturn, 16, _funcUartFin);
+		uart_startSend(SensorReturn, 19, _funcUartFin);
 		while(_flgUartFin != 1){
 			main_clrWDT();
-		}
+		} 
 		
-		//SensorReturnSM
-		for(i = 0; i<16; i++)
-		{
-			SensorReturn[i] = 0x20;
-		}
-		sprintf(SensorReturn, " ADC=%u          ", UVReturn);
-		//SensorReturn[48] = 0x0D;
-		//SensorReturn[49] = 0x0A;
-		//SensorReturn[3] = 0x20;
-		SensorReturn[0] = 13;
-		//SensorReturn[8] = 8;
-		//SensorReturn[1] = 0x0A;
-		
+	    SensorReturn[0] = 159; 
+     
 		//Send Returned Sensor Output to PC!
 		_flgUartFin = 0;
 		uart_stop();
-		uart_startSend(SensorReturn, 16, _funcUartFin);
+		uart_startSend(SensorReturn, 1, _funcUartFin);
 		while(_flgUartFin != 1){
 			main_clrWDT();
+		} 
+		
+	    sprintf(SensorReturn,"[%d]",UVReturn); 
+     
+		//Send Returned Sensor Output to PC!
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 19, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+		
+		
+		SensorReturn[0] = 128;    
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 1, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+		
+		if(UV_Offset < UVReturn)
+		{
+		    
+			sprintf(SensorReturn," UV DETECTED     ",UVIndex); 
+		
+			//Send Returned Sensor Output to PC!
+			_flgUartFin = 0;
+			uart_stop();
+			uart_startSend(SensorReturn, 15, _funcUartFin);
+			while(_flgUartFin != 1){
+				main_clrWDT();
+			} 
+		}
+		else
+		{ 
+			sprintf(SensorReturn," UV SENSOR DEMO ",UVIndex); 
+			//Send Returned Sensor Output to PC!
+			_flgUartFin = 0;
+			uart_stop();
+			uart_startSend(SensorReturn, 15, _funcUartFin);
+			while(_flgUartFin != 1){
+				main_clrWDT();
+			}
 		}
 		
-		//Get Raw value and Scaled Index Value
-
-		//Wait for Manchester Encoded Input... On Second thought, there is no reason for why we need to take input commands for CHicago demo... Thus, I think we can leave this out for now.
-		//Send back Manchester Encoded Signal Back with Raw and Indexed result	
+		SensorReturn[0]=148;
+		SensorReturn[1]= 0;
 		
-		//Test ^= 1;	//Function Code Goes here
-
-		
+		_flgUartFin = 0;
+		uart_stop();
+		uart_startSend(SensorReturn, 1, _funcUartFin);
+		while(_flgUartFin != 1){
+			main_clrWDT();
+		} 
+		   
 		HLT = 1;	//Confirmed that this works... tested using WDT = 8sec and it does take that much time to get back into the loop.
 					//For now, lets comment this out so we know operation works correctly
+				 
 		goto Loop;
-}
+		 
+} 
+ 
+
 
 /* 	// Originally intended to use this for Low Power operation, but now will use the WDT to trigger it.
 	// IRQ and function definition needs to be initialized to use this function.
@@ -427,6 +527,7 @@ static void Initialization(void){
 	//Add EOL characters to strings
 	HelloWorld[12] 	= 0x0D;
 	HelloWorld[13] 	= 0x0A;
+	HelloWorld[10] = 17;
 	
 	//I2C Initialization...
 	//P20C0 = 1;	/* CMOS output */
@@ -440,9 +541,10 @@ static void Initialization(void){
 			     &_uartSetParam );						/* Param... 	 */
 	uart_PortSet();
 	
+	HelloWorld[15] = 13;
 	_flgUartFin = 0;
 	uart_stop();	
-	uart_startSend(HelloWorld, 15, _funcUartFin); // Send, "Hello World!"
+	uart_startSend(HelloWorld, 16, _funcUartFin); // Send, "Hello World!"
 	while(_flgUartFin != 1){
 		main_clrWDT();
 	}		
